@@ -85,20 +85,11 @@ jobs:
           java-version: '17'
 
       # android-actions/setup-android@v3 ist kaputt (versucht das laengst
-      # entfernte SDK-Paket "tools" zu installieren und bricht komplett ab).
-      # ubuntu-22.04-Runner haben ohnehin schon ein Android-SDK unter
-      # $ANDROID_SDK_ROOT vorinstalliert, sdkmanager ist dort aber NICHT auf
-      # PATH (nur die setup-android-Action haette das erledigt) - Pfad also
-      # selbst ermitteln (Versionsordner unter cmdline-tools ist nicht immer
-      # "latest") und fuer die restlichen Steps in GITHUB_PATH eintragen.
-      - name: Android-Lizenzen + NDK
-        run: |
-          CMDLINE_BIN=$(dirname "$(find "$ANDROID_SDK_ROOT/cmdline-tools" -maxdepth 2 -name sdkmanager | head -1)")
-          echo "$CMDLINE_BIN" >> "$GITHUB_PATH"
-          export PATH="$CMDLINE_BIN:$PATH"
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "ndk;27.0.12077973"
-
+      # entfernte SDK-Paket "tools" zu installieren und bricht komplett ab)
+      # - aber unnoetig: ubuntu-22.04-Runner bringen laut deren eigener
+      # Doku (actions/runner-images) schon ein komplettes Android-SDK MIT
+      # NDK vorinstalliert mit (ANDROID_NDK_HOME zeigt direkt drauf), kein
+      # sdkmanager-Aufruf noetig.
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
@@ -133,13 +124,12 @@ jobs:
 
       - name: APK bauen (aarch64 - deckt praktisch alle Geraete ab)
         env:
-          # ${{ env.X }} sieht nur Variablen, die per $GITHUB_ENV gesetzt
-          # wurden - ANDROID_SDK_ROOT kommt vom Runner-Image direkt in die
-          # Shell, deshalb hier ueber $ANDROID_SDK_ROOT statt der env-Expression.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        # ANDROID_NDK_HOME kommt vom Runner-Image direkt in die Shell (siehe
+        # oben), NDK_HOME ist nur der Name, den Tauri dafuer erwartet.
         run: |
-          export NDK_HOME="$ANDROID_SDK_ROOT/ndk/27.0.12077973"
+          export NDK_HOME="$ANDROID_NDK_HOME"
           pnpm tauri android build --apk --target aarch64
 
       - name: APK an das Release haengen
