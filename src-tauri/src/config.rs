@@ -20,6 +20,11 @@ pub struct Config {
     pub stage_fullscreen: bool,
     /// Wrapper beim Login automatisch starten
     pub autostart: bool,
+    /// Welche Ansicht beim Start automatisch geoeffnet wird: "main" (normale
+    /// Uebersicht, Standard fuer alle) oder "requests" (Songwuensche - nur
+    /// fuer BARPC, ersetzt dort den bisherigen Edge-App-Modus). Ungueltige/
+    /// unbekannte Werte fallen auf "main" zurueck, siehe lib.rs.
+    pub start_view: String,
 }
 
 impl Default for Config {
@@ -28,6 +33,7 @@ impl Default for Config {
             server_url: DEFAULT_SERVER_URL.to_string(),
             stage_fullscreen: true,
             autostart: false,
+            start_view: "main".to_string(),
         }
     }
 }

@@ -271,6 +271,7 @@ fn spawn_update_checker<R: Runtime>(app: AppHandle<R>) {
 
 #[cfg(desktop)]
 fn check_for_update<R: Runtime>(app: AppHandle<R>, manual: bool) {
+    use tauri_plugin_notification::{NotificationExt, PermissionState};
     use tauri_plugin_updater::UpdaterExt;
     tauri::async_runtime::spawn(async move {
         let updater = match app.updater() {
@@ -290,6 +291,28 @@ fn check_for_update<R: Runtime>(app: AppHandle<R>, manual: bool) {
                     eprintln!("Update-Installation fehlgeschlagen: {err}");
                     return;
                 }
+                // Unter Windows kommt dieser Code praktisch nie an - der
+                // Prozess beendet sich laut tauri-plugin-updater bereits
+                // waehrend install() (siehe CLAUDE.md, dort bewusst "quiet"
+                // ohne jede UI fuer BARPC). macOS/Linux muessen sich selbst
+                // neu starten - ohne Hinweis wuerde die App fuer wen auch
+                // immer gerade davorsitzt einfach kommentarlos verschwinden
+                // und neu aufgehen. Erst benachrichtigen, dann kurz warten,
+                // damit die Meldung auch wirklich gesehen wird, bevor der
+                // Neustart alles wegreisst.
+                let notification = app.notification();
+                if !matches!(notification.permission_state(), Ok(PermissionState::Granted)) {
+                    let _ = notification.request_permission();
+                }
+                let _ = notification
+                    .builder()
+                    .title("Gutz Now Playing")
+                    .body(format!(
+                        "Update auf Version {} installiert - die App startet jetzt neu.",
+                        update.version
+                    ))
+                    .show();
+                std::thread::sleep(Duration::from_secs(3));
                 app.restart();
             }
             Ok(None) => {
@@ -442,7 +465,8 @@ fn apply_autostart<R: Runtime>(_app: &AppHandle<R>, _enabled: bool) -> Result<()
 pub fn run() {
     let builder = tauri::Builder::default()
         .runtime(tauri_runtime_wry::Wry::default())
-        .plugin(tauri_plugin_opener::init());
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init());
 
     #[cfg(desktop)]
     let builder = builder
@@ -468,6 +492,10 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             let stored = config::load(&handle);
+            let start_view = match stored.as_ref().map(|c| c.start_view.as_str()) {
+                Some("requests") => View::Requests,
+                _ => View::Main,
+            };
             app.manage(AppState {
                 config: Mutex::new(stored.unwrap_or_default()),
                 server_ok: Mutex::new(None),
@@ -484,12 +512,13 @@ pub fn run() {
             #[cfg(desktop)]
             spawn_update_checker(handle.clone());
 
-            // Immer direkt die Songwuensche-Ansicht - kein Einrichtungsschritt.
-            // DEFAULT_SERVER_URL zeigt schon auf np.gutz.info, das deckt den
-            // Normalfall (BARPC) ab; Einstellungen bleiben ueber das Tray
-            // erreichbar, falls doch mal eine andere Server-URL noetig ist
-            // (z. B. lokales Testen gegen gutz-bmax:8080).
-            open_view(&handle, View::Requests)?;
+            // Kein Einrichtungsschritt mehr - DEFAULT_SERVER_URL zeigt schon
+            // auf np.gutz.info. Start-Ansicht ist ueberall "main" (normale
+            // Uebersicht), ausser start_view wurde explizit auf "requests"
+            // gestellt - das macht nur auf BARPC Sinn (ersetzt dort den
+            // bisherigen Edge-App-Modus) und wird einmalig ueber Tray ->
+            // Einstellungen gesetzt.
+            open_view(&handle, start_view)?;
             Ok(())
         })
         .build(tauri::generate_context!())

@@ -40,7 +40,8 @@ label.check {
   align-items: center;
   gap: 10px;
 }
-input[type="url"] {
+input[type="url"],
+select {
   font: inherit;
   padding: 8px 10px;
   border-radius: 8px;

@@ -7,6 +7,7 @@ type Config = {
   serverUrl: string;
   stageFullscreen: boolean;
   autostart: boolean;
+  startView: string;
 };
 
 type View = "main" | "stage" | "requests" | "overlay" | "admin";
@@ -106,6 +107,17 @@ export default function App() {
           onChange={(e) => update({ autostart: e.currentTarget.checked })}
         />
         Beim Anmelden automatisch starten
+      </label>
+
+      <label>
+        Beim Start automatisch öffnen
+        <select
+          value={config.startView}
+          onChange={(e) => update({ startView: e.currentTarget.value })}
+        >
+          <option value="main">Startseite (Normalfall)</option>
+          <option value="requests">Anfragen (nur BARPC)</option>
+        </select>
       </label>
 
       <div className="row">

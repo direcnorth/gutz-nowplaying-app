@@ -16,16 +16,20 @@ Basis: **Tauri 3 (3.0.0-alpha)** + React 19 / TypeScript / Vite. Ziel: Windows (
 
 | Label | Server-Pfad | Besonderheit |
 |---|---|---|
-| `main` | `/` | Nicht das Standardfenster (siehe unten) |
+| `main` | `/` | **Standardfenster fuer alle ausser BARPC** |
 | `stage` | `/nowplaying` | Vollbild ohne Rahmen, wenn `stageFullscreen` (Desktop) |
-| `requests` | `/requests` | **Wird beim Start automatisch geöffnet** |
+| `requests` | `/requests` | Wird beim Start automatisch geoeffnet, wenn `startView` = `"requests"` |
 | `overlay` | `/wish-overlay` | rahmenlos, immer im Vordergrund, nicht in Taskleiste (Desktop) |
 | `admin` | `/admin` | Login serverseitig (Cookie) |
 | `settings` | lokal (`index.html`) | nur über Tray „Einstellungen…“, nie automatisch |
 
-`DEFAULT_SERVER_URL` (`config.rs`) ist `https://np.gutz.info` - der Wrapper startet ohne jede Einrichtung direkt mit der Songwünsche-Ansicht (`View::Requests`), auch beim allerersten Start ohne `config.json`. Kein erzwungener Einstellungs-Dialog mehr (fruehere Version oeffnete bei fehlender Config nur die Einstellungen - das ist bewusst weg, siehe Git-History).
+`DEFAULT_SERVER_URL` (`config.rs`) ist `https://np.gutz.info` - der Wrapper startet ohne jede Einrichtung direkt in der normalen Uebersicht (`View::Main`), auch beim allerersten Start ohne `config.json`. Kein erzwungener Einstellungs-Dialog mehr (fruehere Version oeffnete bei fehlender Config nur die Einstellungen - das ist bewusst weg, siehe Git-History).
 
-**BARPC-Sonderfall:** Der Server vertraut BARPC ueber `SENDER_IPS` (Login-freier Zugriff auf `/requests`, Sender-Heartbeat) anhand der **rohen TCP-Peer-IP**, bewusst nicht `X-Forwarded-For` (Sicherheits-Design in `receiver.py`, siehe dortigen Kommentar bei `_client_ip`/SENDER_IPS-Aufrufstellen). Laeuft der Wrapper auf BARPC ueber die oeffentliche `np.gutz.info` (durch NPM+Cloudflare), sieht der Server nicht mehr BARPCs eigene IP, sondern die des Proxys - `/requests` wuerde dann ploetzlich einen Login verlangen. Deshalb auf BARPC selbst **einmalig** ueber Tray → Einstellungen die Server-URL auf die interne LAN-Adresse umstellen (aktuell `http://192.168.0.10:8080`, siehe `client/setup-requests-view.ps1`) - genau wie beim bisherigen Edge-basierten Setup, nur eben einmalig statt gar nicht konfigurierbar.
+`Config.start_view` (`"main"` Standard, `"requests"` fuer BARPC) steuert, welche Ansicht beim Start automatisch aufgeht - einstellbar im Einstellungsfenster ("Beim Start automatisch oeffnen") oder direkt in `config.json`.
+
+**BARPC-Sonderfall:** Zwei Einstellungen muessen dort einmalig ueber Tray → Einstellungen umgestellt werden (Anleitung fuer beide siehe `client/setup-requests-view.ps1`-Ersatz):
+1. `startView` auf "Anfragen (nur BARPC)" - ersetzt den bisherigen Edge-App-Autostart fuer `/requests`.
+2. Server-URL auf die interne LAN-Adresse (aktuell `http://192.168.0.10:8080`) statt der oeffentlichen `np.gutz.info`. Grund: Der Server vertraut BARPC ueber `SENDER_IPS` (Login-freier Zugriff auf `/requests`, Sender-Heartbeat) anhand der **rohen TCP-Peer-IP**, bewusst nicht `X-Forwarded-For` (Sicherheits-Design in `receiver.py`). Ueber die oeffentliche Adresse (durch NPM+Cloudflare) saehe der Server nur noch die IP des Proxys, `/requests` wuerde dann ploetzlich einen Login verlangen.
 
 Der Health-Monitor pollt alle 10 s `GET /healthz`; bei Ausfall bekommen die Fenster den Titelzusatz „Server nicht erreichbar“, bei Rückkehr werden alle Remote-Fenster neu geladen. Das Event `server-status` geht an das Einstellungsfenster.
 
@@ -65,9 +69,14 @@ Tauri-Updater-Plugin (`tauri-plugin-updater`, Desktop-only). Check laeuft von
 selbst im Hintergrund (30s nach Start, danach alle 6h, siehe `lib.rs`
 `spawn_update_checker`/`check_for_update`) sowie manuell ueber "Nach Updates
 suchen" im Tray-Menu. Bei gefundenem Update wird sofort heruntergeladen und
-installiert; unter macOS/Linux startet sich die App danach selbst neu
-(`app.restart()`), unter Windows beendet sich der Prozess laut
-tauri-plugin-updater bereits waehrend `install()`.
+installiert; unter macOS/Linux zeigt die App zuerst eine native
+Benachrichtigung ("Update auf Version X installiert - die App startet jetzt
+neu"), wartet 3s und startet sich dann selbst neu (`app.restart()`) - ohne
+den Hinweis wuerde die App fuer wen auch immer gerade davorsitzt einfach
+kommentarlos verschwinden und neu aufgehen. Unter Windows beendet sich der
+Prozess laut tauri-plugin-updater bereits waehrend `install()`, dieser Code
+wird dort also nie erreicht (und BARPC soll ja bewusst "quiet"/unbeobachtet
+bleiben, siehe unten).
 
 - **Windows unbeaufsichtigt (BARPC-relevant):** `bundle.targets` enthaelt
   bewusst kein `"msi"` mehr - nur die NSIS-`.exe`, mit
