@@ -39,8 +39,15 @@ impl Config {
         if !matches!(base.scheme(), "http" | "https") {
             return Err("Server-URL muss mit http:// oder https:// beginnen".into());
         }
-        base.join(path.trim_start_matches('/'))
-            .map_err(|e| format!("Ungültiger Pfad {path}: {e}"))
+        let mut url = base
+            .join(path.trim_start_matches('/'))
+            .map_err(|e| format!("Ungültiger Pfad {path}: {e}"))?;
+        // Markiert die Anfrage fuer den Server als "kommt aus dem Wrapper" -
+        // die Downloadcenter-Verlinkung (Nav, Footer, Admin) blendet sich
+        // dann selbst aus, siehe receiver.py _is_wrapper(). Betrifft auch
+        // den Healthcheck in probe_server(), das ist harmlos.
+        url.query_pairs_mut().append_pair("wrapper", "1");
+        Ok(url)
     }
 
     pub fn validate(&self) -> Result<(), String> {
