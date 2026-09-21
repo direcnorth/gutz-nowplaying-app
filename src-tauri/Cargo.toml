@@ -2,7 +2,7 @@
 name = "gutz-nowplaying-app"
 version = "0.1.1"
 description = "Desktop-Wrapper für gutz-nowplaying"
-authors = ["Felix Schattenberg"]
+authors = ["Gutzkowclub Dresden e.V."]
 edition = "2021"
 
 [lib]
