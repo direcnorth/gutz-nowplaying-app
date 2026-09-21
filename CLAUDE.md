@@ -55,6 +55,37 @@ Ohne Tray-Host (StatusNotifierWatcher) läuft die App ohne Tray-Menü weiter und
 - Identifier `de.gutz.nowplaying` ist nach Release unveränderlich und darf nicht auf `.app` enden.
 - macOS/Xcode 27: in `gen/apple/project.yml` und `.pbxproj` `ENABLE_USER_SCRIPT_SANDBOXING = NO` setzen, Simulator-UI heißt DeviceHub. Siehe Referenzprojekt `gutz-app` auf dem Mac.
 
+## Auto-Update
+
+Tauri-Updater-Plugin (`tauri-plugin-updater`, Desktop-only). Check laeuft von
+selbst im Hintergrund (30s nach Start, danach alle 6h, siehe `lib.rs`
+`spawn_update_checker`/`check_for_update`) sowie manuell ueber "Nach Updates
+suchen" im Tray-Menu. Bei gefundenem Update wird sofort heruntergeladen und
+installiert; unter macOS/Linux startet sich die App danach selbst neu
+(`app.restart()`), unter Windows beendet sich der Prozess laut
+tauri-plugin-updater bereits waehrend `install()`.
+
+- Endpoint + Public Key: `plugins.updater` in `tauri.conf.json`, zeigt auf
+  `.../releases/latest/download/latest.json` (wird von `tauri-action` beim
+  Release automatisch erzeugt, siehe `bundle.createUpdaterArtifacts`).
+- Signiert wird ausschliesslich in CI: Private Key liegt lokal unter
+  `~/.tauri/gutz-nowplaying-app.key` (nicht im Repo) und als GitHub-Actions-
+  Secret `TAURI_SIGNING_PRIVATE_KEY` (+ `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`,
+  aktuell leer) auf `direcnorth/gutz-nowplaying-app`. Ohne dieses Secret baut
+  `release.yml` zwar noch Installer, aber keine gueltig signierten
+  Updater-Artefakte - Updates wuerden dann von jedem Client abgelehnt.
+- Key verloren = Updates fuer alle bisherigen Installationen kaputt (neuer
+  Public Key passt nicht zu den bereits ausgelieferten Binaries). Kein
+  Passwort auf dem Key, bewusst - vereinfacht den nicht-interaktiven CI-Lauf.
+
+## App-Icon
+
+Generiert aus `gutz-nowplaying/favicon-512.png` (512×512, transparent) via
+`pnpm tauri icon <quelle>` - erzeugt den kompletten Satz unter
+`src-tauri/icons/` (Windows/macOS/Linux/iOS/Android) neu. Bei einem neuen
+Quellbild denselben Befehl erneut laufen lassen, nicht einzelne Icon-Dateien
+von Hand ersetzen (Groessen/Formate muessen zueinander passen).
+
 ## Konventionen
 
 - Plattformspezifisches Rust nur hinter `#[cfg(target_os = "...")]` / `#[cfg(desktop)]`.

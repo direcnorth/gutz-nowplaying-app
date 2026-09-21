@@ -16,6 +16,10 @@ use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuild
 
 const HEALTH_INTERVAL: Duration = Duration::from_secs(10);
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(3);
+#[cfg(desktop)]
+const UPDATE_CHECK_STARTUP_DELAY: Duration = Duration::from_secs(30);
+#[cfg(desktop)]
+const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 const SETTINGS_LABEL: &str = "settings";
 
 /// Die Ansichten der Web-UI, die als eigene Fenster geöffnet werden können.
@@ -228,6 +232,69 @@ fn spawn_health_monitor<R: Runtime>(app: AppHandle<R>) {
 }
 
 // ---------------------------------------------------------------------------
+// Auto-Update
+// ---------------------------------------------------------------------------
+//
+// Tauri-Updater-Plugin (siehe plugins.updater in tauri.conf.json fuer Pubkey
+// + Endpoint). Signiert wird nur in CI: Private Key liegt ausschliesslich als
+// GitHub-Actions-Secret TAURI_SIGNING_PRIVATE_KEY, siehe
+// .github/workflows/release.yml - ohne gueltige Signatur lehnt der Updater
+// das Paket ab.
+//
+// Laeuft von selbst im Hintergrund (kurz nach dem Start, danach alle 6h) -
+// der Bar-PC soll sich nicht auf jemanden verlassen, der manuell nach
+// Updates schaut. "Nach Updates suchen" im Tray-Menu stoesst denselben Check
+// nur sofort an. Bei gefundenem Update wird direkt heruntergeladen und
+// installiert; unter macOS/Linux muss die App danach neu gestartet werden
+// (Windows beendet den Prozess laut Doku bereits waehrend install()).
+#[cfg(desktop)]
+fn spawn_update_checker<R: Runtime>(app: AppHandle<R>) {
+    std::thread::Builder::new()
+        .name("update-checker".into())
+        .spawn(move || {
+            std::thread::sleep(UPDATE_CHECK_STARTUP_DELAY);
+            loop {
+                check_for_update(app.clone(), false);
+                std::thread::sleep(UPDATE_CHECK_INTERVAL);
+            }
+        })
+        .expect("update checker thread");
+}
+
+#[cfg(desktop)]
+fn check_for_update<R: Runtime>(app: AppHandle<R>, manual: bool) {
+    use tauri_plugin_updater::UpdaterExt;
+    tauri::async_runtime::spawn(async move {
+        let updater = match app.updater() {
+            Ok(u) => u,
+            Err(err) => {
+                eprintln!("Updater nicht verfuegbar: {err}");
+                return;
+            }
+        };
+        match updater.check().await {
+            Ok(Some(update)) => {
+                println!(
+                    "Update gefunden: {} -> {}, wird heruntergeladen",
+                    update.current_version, update.version
+                );
+                if let Err(err) = update.download_and_install(|_, _| {}, || {}).await {
+                    eprintln!("Update-Installation fehlgeschlagen: {err}");
+                    return;
+                }
+                app.restart();
+            }
+            Ok(None) => {
+                if manual {
+                    println!("Kein Update verfuegbar.");
+                }
+            }
+            Err(err) => eprintln!("Update-Check fehlgeschlagen: {err}"),
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Tray
 // ---------------------------------------------------------------------------
 
@@ -248,6 +315,7 @@ fn build_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     }
     let settings = MenuItem::with_id(app, "settings", "Einstellungen…", true, None::<&str>)?;
     let reload = MenuItem::with_id(app, "reload", "Alle Fenster neu laden", true, None::<&str>)?;
+    let update = MenuItem::with_id(app, "check_update", "Nach Updates suchen", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Beenden", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
@@ -259,6 +327,7 @@ fn build_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     menu.append(&sep1)?;
     menu.append(&settings)?;
     menu.append(&reload)?;
+    menu.append(&update)?;
     menu.append(&sep2)?;
     menu.append(&quit)?;
 
@@ -272,6 +341,10 @@ fn build_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
                 "settings" => open_settings(app),
                 "reload" => {
                     reload_remote_windows(app);
+                    Ok(())
+                }
+                "check_update" => {
+                    check_for_update(app.clone(), true);
                     Ok(())
                 }
                 "quit" => {
@@ -372,7 +445,8 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
-        ));
+        ))
+        .plugin(tauri_plugin_updater::Builder::new().build());
 
     let app = builder
         .invoke_handler(tauri::generate_handler![
@@ -400,6 +474,8 @@ pub fn run() {
             }
 
             spawn_health_monitor(handle.clone());
+            #[cfg(desktop)]
+            spawn_update_checker(handle.clone());
 
             if configured {
                 open_view(&handle, View::Main)?;
