@@ -496,8 +496,19 @@ pub fn run() {
                 Some("requests") => View::Requests,
                 _ => View::Main,
             };
+            let config = stored.unwrap_or_default();
+            // Haelt den OS-Autostart-Eintrag mit der Config synchron, auch
+            // wenn config.json von Hand angelegt/bearbeitet wurde statt ueber
+            // die Einstellungen gespeichert - apply_autostart() lief bisher
+            // NUR im set_config-Kommando, ein direkt geschriebenes
+            // "autostart": true blieb also wirkungslos, bis irgendwer einmal
+            // die Einstellungen oeffnet und speichert.
+            #[cfg(desktop)]
+            if let Err(err) = apply_autostart(&handle, config.autostart) {
+                eprintln!("Autostart beim Start nicht synchronisiert: {err}");
+            }
             app.manage(AppState {
-                config: Mutex::new(stored.unwrap_or_default()),
+                config: Mutex::new(config),
                 server_ok: Mutex::new(None),
             });
 
