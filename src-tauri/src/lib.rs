@@ -20,6 +20,8 @@ const HEALTH_TIMEOUT: Duration = Duration::from_secs(3);
 const UPDATE_CHECK_STARTUP_DELAY: Duration = Duration::from_secs(30);
 #[cfg(desktop)]
 const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+#[cfg(any(target_os = "android", target_os = "ios"))]
+const MOBILE_UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 const SETTINGS_LABEL: &str = "settings";
 
 /// Die Ansichten der Web-UI, die als eigene Fenster geöffnet werden können.
@@ -89,6 +91,19 @@ impl AppState {
     }
 }
 
+/// Welche Ansicht automatisch geoeffnet wird - beim ersten Start UND beim
+/// "zweiten Start" (Single-Instance-Neuaufruf, z.B. erneuter Klick auf die
+/// Verknuepfung waehrend die App im Tray weiterlaeuft). Frueher war Letzteres
+/// hart auf View::Main verdrahtet, was start_view="requests" auf BARPC nach
+/// Schliessen+Wiederoeffnen des Fensters ignorierte - die App fiel dann auf
+/// die normale Uebersicht zurueck statt wieder Anfragen zu zeigen.
+fn resolve_start_view(config: &Config) -> View {
+    match config.start_view.as_str() {
+        "requests" => View::Requests,
+        _ => View::Main,
+    }
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ServerStatus {
@@ -131,7 +146,17 @@ fn open_view<R: Runtime>(app: &AppHandle<R>, view: View) -> Result<(), String> {
             let b = b.decorations(false).always_on_top(true).skip_taskbar(true);
             b
         }
-        View::Main | View::Requests | View::Admin => builder.inner_size(1100.0, 800.0),
+        View::Requests => {
+            // Feste 1100x800 passen nicht auf jeden Bildschirm - BARPC haengt
+            // z.B. an einem 1024x1280-Hochkant-Monitor, das Fenster ragte
+            // dort seitlich raus. Maximiert statt fester Groesse passt sich
+            // an, egal welche Aufloesung/Ausrichtung gerade dranhaengt.
+            let b = builder.inner_size(1100.0, 800.0);
+            #[cfg(desktop)]
+            let b = b.maximized(true);
+            b
+        }
+        View::Main | View::Admin => builder.inner_size(1100.0, 800.0),
     };
 
     builder.build().map_err(|e| format!("Fenster {}: {e}", view.label()))?;
@@ -325,6 +350,73 @@ fn check_for_update<R: Runtime>(app: AppHandle<R>, manual: bool) {
     });
 }
 
+// tauri-plugin-updater unterstuetzt Android/iOS nicht (offizielle Doku:
+// "level: none" fuer beide) - ohne Play Store/App Store gibt es dort sonst
+// GAR keinen Hinweis auf neue Versionen. Eigener, sehr einfacher Ersatz:
+// periodisch die neueste GitHub-Release-Version mit der installierten
+// vergleichen, bei Unterschied eine Benachrichtigung zeigen. Kein Auto-
+// Install (dafuer braeuchte Android REQUEST_INSTALL_PACKAGES + eine eigene
+// Download/Intent-Logik) - die Benachrichtigung verweist stattdessen auf
+// /downloads, wo der Android-Tab die neue APK zum manuellen Nachinstallieren
+// anbietet (gleicher Signierschluessel wie die vorherige Version, das ist
+// also ein normales In-Place-Update, kein Neu-Setup).
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn spawn_mobile_update_checker<R: Runtime>(app: AppHandle<R>) {
+    std::thread::Builder::new()
+        .name("mobile-update-checker".into())
+        .spawn(move || loop {
+            check_mobile_update(app.clone());
+            std::thread::sleep(MOBILE_UPDATE_CHECK_INTERVAL);
+        })
+        .expect("mobile update checker thread");
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn check_mobile_update<R: Runtime>(app: AppHandle<R>) {
+    use tauri_plugin_notification::{NotificationExt, PermissionState};
+
+    #[derive(serde::Deserialize)]
+    struct LatestRelease {
+        tag_name: String,
+    }
+
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(HEALTH_TIMEOUT))
+        .build()
+        .into();
+    let url = "https://api.github.com/repos/direcnorth/gutz-nowplaying-app/releases/latest";
+    let release: LatestRelease = match agent
+        .get(url)
+        .header("User-Agent", "gutz-nowplaying-app")
+        .call()
+        .and_then(|mut resp| resp.body_mut().read_json().map_err(Into::into))
+    {
+        Ok(r) => r,
+        Err(err) => {
+            eprintln!("Mobiler Update-Check fehlgeschlagen: {err}");
+            return;
+        }
+    };
+    let latest = release.tag_name.trim_start_matches('v');
+    let current = env!("CARGO_PKG_VERSION");
+    let parse = |s: &str| -> Vec<u32> { s.split('.').filter_map(|p| p.parse().ok()).collect() };
+    if parse(latest) <= parse(current) {
+        return;
+    }
+
+    let notification = app.notification();
+    if !matches!(notification.permission_state(), Ok(PermissionState::Granted)) {
+        let _ = notification.request_permission();
+    }
+    let _ = notification
+        .builder()
+        .title("Gutz Now Playing")
+        .body(format!(
+            "Update verfügbar: Version {latest}. Zum Installieren np.gutz.info/downloads öffnen (Android-Tab)."
+        ))
+        .show();
+}
+
 // ---------------------------------------------------------------------------
 // Tray
 // ---------------------------------------------------------------------------
@@ -471,8 +563,11 @@ pub fn run() {
     #[cfg(desktop)]
     let builder = builder
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // Zweiter Start: Hauptfenster in den Vordergrund holen.
-            let _ = open_view(app, View::Main);
+            // Zweiter Start: dieselbe Ansicht wie beim regulaeren Start
+            // nach vorne holen (siehe resolve_start_view - NICHT hart auf
+            // Main, sonst ignoriert das start_view="requests" auf BARPC).
+            let cfg = app.state::<AppState>().config();
+            let _ = open_view(app, resolve_start_view(&cfg));
         }))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -491,12 +586,8 @@ pub fn run() {
         ])
         .setup(|app| {
             let handle = app.handle().clone();
-            let stored = config::load(&handle);
-            let start_view = match stored.as_ref().map(|c| c.start_view.as_str()) {
-                Some("requests") => View::Requests,
-                _ => View::Main,
-            };
-            let config = stored.unwrap_or_default();
+            let config = config::load(&handle).unwrap_or_default();
+            let start_view = resolve_start_view(&config);
             // Haelt den OS-Autostart-Eintrag mit der Config synchron, auch
             // wenn config.json von Hand angelegt/bearbeitet wurde statt ueber
             // die Einstellungen gespeichert - apply_autostart() lief bisher
@@ -522,6 +613,8 @@ pub fn run() {
             spawn_health_monitor(handle.clone());
             #[cfg(desktop)]
             spawn_update_checker(handle.clone());
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            spawn_mobile_update_checker(handle.clone());
 
             // Kein Einrichtungsschritt mehr - DEFAULT_SERVER_URL zeigt schon
             // auf np.gutz.info. Start-Ansicht ist ueberall "main" (normale

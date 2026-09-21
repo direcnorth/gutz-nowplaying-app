@@ -87,3 +87,19 @@ pub fn save<R: Runtime>(app: &AppHandle<R>, config: &Config) -> Result<(), Strin
     let raw = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
     fs::write(&path, raw).map_err(|e| format!("Config schreiben ({}): {e}", path.display()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Exakt das, was PowerShells `ConvertTo-Json` erzeugt (CRLF, doppeltes
+    // Leerzeichen nach dem Doppelpunkt) - so wurde config.json fuer BARPC
+    // von Hand provisioniert, siehe CLAUDE.md.
+    #[test]
+    fn parses_powershell_convertto_json_output() {
+        let raw = "{\r\n    \"startView\":  \"requests\",\r\n    \"serverUrl\":  \"http://192.168.0.10:8080\",\r\n    \"stageFullscreen\":  true,\r\n    \"autostart\":  true\r\n}";
+        let config: Config = serde_json::from_str(raw).expect("sollte parsen");
+        assert_eq!(config.start_view, "requests");
+        assert_eq!(config.server_url, "http://192.168.0.10:8080");
+    }
+}

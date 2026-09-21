@@ -1,6 +1,6 @@
 [package]
 name = "gutz-nowplaying-app"
-version = "0.1.5"
+version = "0.1.6"
 description = "Desktop-Wrapper für gutz-nowplaying"
 authors = ["Gutzkowclub Dresden e.V."]
 edition = "2021"
@@ -21,7 +21,7 @@ tauri-plugin-notification = "3.0.0-alpha.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2"
-ureq = { version = "3", default-features = false, features = ["rustls"] }
+ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "3.0.0-alpha.0"
