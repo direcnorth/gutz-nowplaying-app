@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "anthropic.claude-code",
+    "rust-lang.rust-analyzer",
+    "tauri-apps.tauri-vscode",
+    "tamasfe.even-better-toml",
+    "vadimcn.vscode-lldb",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode"
+  ]
+}

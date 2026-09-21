@@ -1,0 +1,94 @@
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light dark;
+  color: #1a1a1a;
+  background: #f4f4f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #f4f4f5;
+    background: #18181b;
+  }
+}
+body {
+  margin: 0;
+}
+.container {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 24px 20px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+h1 {
+  font-size: 1.4rem;
+  margin: 0;
+}
+h2 {
+  font-size: 1rem;
+  margin: 12px 0 0;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+input[type="url"] {
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #a1a1aa;
+  background: transparent;
+  color: inherit;
+}
+.row {
+  display: flex;
+  gap: 10px;
+}
+.row.wrap {
+  flex-wrap: wrap;
+}
+button {
+  font: inherit;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #a1a1aa;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+button.primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.status {
+  margin: 0;
+  font-size: 0.9rem;
+}
+.status.ok {
+  color: #16a34a;
+}
+.status.down {
+  color: #dc2626;
+}
+.message {
+  margin: 0;
+  font-size: 0.9rem;
+}
+.hint {
+  margin: 0;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
