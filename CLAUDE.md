@@ -69,6 +69,19 @@ installiert; unter macOS/Linux startet sich die App danach selbst neu
 (`app.restart()`), unter Windows beendet sich der Prozess laut
 tauri-plugin-updater bereits waehrend `install()`.
 
+- **Windows unbeaufsichtigt (BARPC-relevant):** `bundle.targets` enthaelt
+  bewusst kein `"msi"` mehr - nur die NSIS-`.exe`, mit
+  `bundle.windows.nsis.installMode: "currentUser"` (installiert nach
+  `%LOCALAPPDATA%`, keine Admin-Rechte noetig) und
+  `plugins.updater.windows.installMode: "quiet"` (kein Fortschrittsfenster,
+  keine Rueckfrage). Laut Tauri-Doku braucht "quiet" zwingend eine
+  Per-User-Installation, sonst kann der Installer keine Admin-Rechte anfragen
+  und das Update haengt. MSI ist per-machine und haette bei jedem Update
+  einen UAC-Dialog ausgeloest - auf einem unbeaufsichtigten Bar-PC waere das
+  Update dann einfach steckengeblieben. **Noch nicht auf echter
+  Windows-Hardware verifiziert** (kein Windows-Rechner beim Entwickeln
+  verfuegbar) - vor dem produktiven Einsatz auf BARPC einmal einen
+  Update-Zyklus real durchspielen.
 - Endpoint + Public Key: `plugins.updater` in `tauri.conf.json`, zeigt auf
   `.../releases/latest/download/latest.json` (wird von `tauri-action` beim
   Release automatisch erzeugt, siehe `bundle.createUpdaterArtifacts`).
