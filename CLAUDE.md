@@ -16,14 +16,18 @@ Basis: **Tauri 3 (3.0.0-alpha)** + React 19 / TypeScript / Vite. Ziel: Windows (
 
 | Label | Server-Pfad | Besonderheit |
 |---|---|---|
-| `main` | `/` | Standardfenster, wird beim Start geöffnet |
-| `stage` | `/nowplaying` | Vollbild ohne Rahmen, wenn `stageFullscreen` |
-| `requests` | `/requests` | |
-| `overlay` | `/wish-overlay` | rahmenlos, immer im Vordergrund, nicht in Taskleiste |
+| `main` | `/` | Nicht das Standardfenster (siehe unten) |
+| `stage` | `/nowplaying` | Vollbild ohne Rahmen, wenn `stageFullscreen` (Desktop) |
+| `requests` | `/requests` | **Wird beim Start automatisch geöffnet** |
+| `overlay` | `/wish-overlay` | rahmenlos, immer im Vordergrund, nicht in Taskleiste (Desktop) |
 | `admin` | `/admin` | Login serverseitig (Cookie) |
-| `settings` | lokal (`index.html`) | wird beim ersten Start ohne Config geöffnet |
+| `settings` | lokal (`index.html`) | nur über Tray „Einstellungen…“, nie automatisch |
 
-Erster Start ohne `config.json` öffnet nur die Einstellungen. Der Health-Monitor pollt alle 10 s `GET /healthz`; bei Ausfall bekommen die Fenster den Titelzusatz „Server nicht erreichbar“, bei Rückkehr werden alle Remote-Fenster neu geladen. Das Event `server-status` geht an das Einstellungsfenster.
+`DEFAULT_SERVER_URL` (`config.rs`) ist `https://np.gutz.info` - der Wrapper startet ohne jede Einrichtung direkt mit der Songwünsche-Ansicht (`View::Requests`), auch beim allerersten Start ohne `config.json`. Kein erzwungener Einstellungs-Dialog mehr (fruehere Version oeffnete bei fehlender Config nur die Einstellungen - das ist bewusst weg, siehe Git-History).
+
+**BARPC-Sonderfall:** Der Server vertraut BARPC ueber `SENDER_IPS` (Login-freier Zugriff auf `/requests`, Sender-Heartbeat) anhand der **rohen TCP-Peer-IP**, bewusst nicht `X-Forwarded-For` (Sicherheits-Design in `receiver.py`, siehe dortigen Kommentar bei `_client_ip`/SENDER_IPS-Aufrufstellen). Laeuft der Wrapper auf BARPC ueber die oeffentliche `np.gutz.info` (durch NPM+Cloudflare), sieht der Server nicht mehr BARPCs eigene IP, sondern die des Proxys - `/requests` wuerde dann ploetzlich einen Login verlangen. Deshalb auf BARPC selbst **einmalig** ueber Tray → Einstellungen die Server-URL auf die interne LAN-Adresse umstellen (aktuell `http://192.168.0.10:8080`, siehe `client/setup-requests-view.ps1`) - genau wie beim bisherigen Edge-basierten Setup, nur eben einmalig statt gar nicht konfigurierbar.
+
+Der Health-Monitor pollt alle 10 s `GET /healthz`; bei Ausfall bekommen die Fenster den Titelzusatz „Server nicht erreichbar“, bei Rückkehr werden alle Remote-Fenster neu geladen. Das Event `server-status` geht an das Einstellungsfenster.
 
 ## Befehle
 

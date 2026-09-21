@@ -5,7 +5,11 @@ use std::{fs, path::PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
 use url::Url;
 
-pub const DEFAULT_SERVER_URL: &str = "http://gutz-bmax:8080";
+// Oeffentliche Adresse, nicht der interne LAN-Hostname - der Wrapper soll
+// ueberall (auch ausserhalb des Vereins-Netzwerks) ohne Einrichtung
+// funktionieren. Wer wirklich gegen die interne Adresse testen will, stellt
+// das manuell in den Einstellungen um.
+pub const DEFAULT_SERVER_URL: &str = "https://np.gutz.info";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]

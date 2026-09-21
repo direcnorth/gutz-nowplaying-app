@@ -52,5 +52,11 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Ohne das schlaegt der Build fehl, sobald ein Updater-Pubkey in
+          # tauri.conf.json steht (siehe release.yml) - tauri build verlangt
+          # dann IMMER den passenden Private Key, auch fuer den reinen
+          # CI-Check hier ohne Release.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: ${{ matrix.args }}

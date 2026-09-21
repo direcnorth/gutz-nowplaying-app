@@ -113,16 +113,24 @@ fn open_view<R: Runtime>(app: &AppHandle<R>, view: View) -> Result<(), String> {
     let builder = WebviewWindowBuilder::new(app, view.label(), WebviewUrl::External(url))
         .title(view.title());
 
+    // fullscreen()/decorations()/always_on_top()/skip_taskbar() gibt es nur
+    // auf Desktop - Android/iOS haben kein Fenstermodell in diesem Sinn
+    // (eine Activity/ein Webview), der Build schlaegt sonst dort fehl.
     let builder = match view {
-        View::Stage => builder
-            .inner_size(1280.0, 720.0)
-            .fullscreen(cfg.stage_fullscreen)
-            .decorations(!cfg.stage_fullscreen),
-        View::Overlay => builder
-            .inner_size(480.0, 270.0)
-            .decorations(false)
-            .always_on_top(true)
-            .skip_taskbar(true),
+        View::Stage => {
+            let b = builder.inner_size(1280.0, 720.0);
+            #[cfg(desktop)]
+            let b = b
+                .fullscreen(cfg.stage_fullscreen)
+                .decorations(!cfg.stage_fullscreen);
+            b
+        }
+        View::Overlay => {
+            let b = builder.inner_size(480.0, 270.0);
+            #[cfg(desktop)]
+            let b = b.decorations(false).always_on_top(true).skip_taskbar(true);
+            b
+        }
         View::Main | View::Requests | View::Admin => builder.inner_size(1100.0, 800.0),
     };
 
@@ -460,7 +468,6 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             let stored = config::load(&handle);
-            let configured = stored.is_some();
             app.manage(AppState {
                 config: Mutex::new(stored.unwrap_or_default()),
                 server_ok: Mutex::new(None),
@@ -477,11 +484,12 @@ pub fn run() {
             #[cfg(desktop)]
             spawn_update_checker(handle.clone());
 
-            if configured {
-                open_view(&handle, View::Main)?;
-            } else {
-                open_settings(&handle)?;
-            }
+            // Immer direkt die Songwuensche-Ansicht - kein Einrichtungsschritt.
+            // DEFAULT_SERVER_URL zeigt schon auf np.gutz.info, das deckt den
+            // Normalfall (BARPC) ab; Einstellungen bleiben ueber das Tray
+            // erreichbar, falls doch mal eine andere Server-URL noetig ist
+            // (z. B. lokales Testen gegen gutz-bmax:8080).
+            open_view(&handle, View::Requests)?;
             Ok(())
         })
         .build(tauri::generate_context!())
