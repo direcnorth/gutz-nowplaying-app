@@ -87,9 +87,15 @@ jobs:
       # android-actions/setup-android@v3 ist kaputt (versucht das laengst
       # entfernte SDK-Paket "tools" zu installieren und bricht komplett ab).
       # ubuntu-22.04-Runner haben ohnehin schon ein Android-SDK unter
-      # $ANDROID_HOME vorinstalliert - nur NDK fehlt, die holen wir direkt.
+      # $ANDROID_SDK_ROOT vorinstalliert, sdkmanager ist dort aber NICHT auf
+      # PATH (nur die setup-android-Action haette das erledigt) - Pfad also
+      # selbst ermitteln (Versionsordner unter cmdline-tools ist nicht immer
+      # "latest") und fuer die restlichen Steps in GITHUB_PATH eintragen.
       - name: Android-Lizenzen + NDK
         run: |
+          CMDLINE_BIN=$(dirname "$(find "$ANDROID_SDK_ROOT/cmdline-tools" -maxdepth 2 -name sdkmanager | head -1)")
+          echo "$CMDLINE_BIN" >> "$GITHUB_PATH"
+          export PATH="$CMDLINE_BIN:$PATH"
           yes | sdkmanager --licenses > /dev/null || true
           sdkmanager "ndk;27.0.12077973"
 
