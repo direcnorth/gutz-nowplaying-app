@@ -79,9 +79,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
-
-      - name: NDK installieren + Lizenzen akzeptieren
+      # android-actions/setup-android@v3 ist kaputt (versucht das laengst
+      # entfernte SDK-Paket "tools" zu installieren und bricht komplett ab).
+      # ubuntu-22.04-Runner haben ohnehin schon ein Android-SDK unter
+      # $ANDROID_HOME vorinstalliert - nur NDK fehlt, die holen wir direkt.
+      - name: Android-Lizenzen + NDK
         run: |
           yes | sdkmanager --licenses > /dev/null || true
           sdkmanager "ndk;27.0.12077973"
@@ -120,12 +122,14 @@ jobs:
 
       - name: APK bauen (aarch64 - deckt praktisch alle Geraete ab)
         env:
-          NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.0.12077973
-          # Signiert die Tauri-Updater-Metadaten (falls spaeter auch Android
-          # darueber aktualisiert werden soll) - schadet sonst nicht.
+          # ${{ env.X }} sieht nur Variablen, die per $GITHUB_ENV gesetzt
+          # wurden - ANDROID_SDK_ROOT kommt vom Runner-Image direkt in die
+          # Shell, deshalb hier ueber $ANDROID_SDK_ROOT statt der env-Expression.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: pnpm tauri android build --apk --target aarch64
+        run: |
+          export NDK_HOME="$ANDROID_SDK_ROOT/ndk/27.0.12077973"
+          pnpm tauri android build --apk --target aarch64
 
       - name: APK an das Release haengen
         env:
