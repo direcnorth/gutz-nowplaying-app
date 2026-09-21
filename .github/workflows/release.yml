@@ -55,7 +55,12 @@ jobs:
 
       - uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITHUB_TOKEN verweigert "create a release" grundlos trotz
+          # `permissions: contents: write` (Stand 2026-09-21, ohne dass sich
+          # an der Konfiguration etwas geaendert haette - lief fuer v0.1.0/
+          # v0.1.1 noch problemlos). RELEASE_TOKEN ist ein persoenlicher
+          # Token mit repo-Scope als Workaround, siehe Commit-Message.
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           # Signiert die Updater-Artefakte (latest.json + .sig je Plattform),
           # siehe plugins.updater.pubkey in tauri.conf.json - ohne gueltige
           # Signatur lehnt der Autoupdater das Paket ab.
@@ -133,7 +138,7 @@ jobs:
 
       - name: APK an das Release haengen
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           gh release upload "${{ github.ref_name }}" \
             src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk#Gutz.Now.Playing_${{ github.ref_name }}.apk \
