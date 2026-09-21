@@ -1,6 +1,6 @@
 [package]
 name = "gutz-nowplaying-app"
-version = "0.1.1"
+version = "0.1.2"
 description = "Desktop-Wrapper für gutz-nowplaying"
 authors = ["Gutzkowclub Dresden e.V."]
 edition = "2021"
